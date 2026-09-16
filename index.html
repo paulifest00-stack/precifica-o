@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PriceLab — Precificação por SKU</title>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f7f7f5; --surface:#fff; --line:#e6e6e1; --line2:#f0f0ec;
+  --ink:#15161a; --ink2:#3f4249; --mut:#8a8d95;
+  --acc:#0f7a5a; --acc-soft:#eaf5f0; --acc-band:#f2f9f6;
+  --rose:#a83249; --rose-soft:#fbeef0;
+  --amber:#8a6a12; --amber-soft:#faf3e2;
+  --cost:#2c5f8a; --cost-band:#f1f6fa; --cost-soft:#eaf2f9;
+  --fee:#7a4a1f; --fee-band:#fbf5ef;
+  --r:20px; --ease:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-font-smoothing:antialiased}
+body{font-family:'Satoshi',system-ui,sans-serif;background:var(--bg);color:var(--ink);padding:40px 24px 90px}
+.wrap{max-width:1480px;margin:0 auto}
+.num{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+
+header{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:40px;align-items:end;padding-bottom:30px;border-bottom:1px solid var(--line)}
+.eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--mut);font-weight:700;margin-bottom:12px}
+h1{font-size:clamp(32px,5vw,54px);font-weight:900;letter-spacing:-.035em;line-height:.96}
+h1 span{color:var(--mut)}
+.lede{margin-top:13px;color:var(--ink2);font-size:15px;line-height:1.6;max-width:56ch}
+.channels{display:flex;gap:4px;padding:4px;background:#eeeeea;border-radius:14px}
+.channels button{border:0;background:transparent;color:var(--ink2);font:500 13.5px 'Satoshi';padding:9px 16px;border-radius:11px;cursor:pointer;transition:.35s var(--ease);white-space:nowrap}
+.channels button[aria-selected="true"]{background:var(--surface);color:var(--ink);font-weight:700;box-shadow:0 1px 2px rgba(21,22,26,.07),0 4px 12px -6px rgba(21,22,26,.14)}
+
+.bento{display:grid;grid-template-columns:1.35fr 1fr 1fr 1fr;gap:16px;margin:32px 0 26px}
+.metric{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px 25px;box-shadow:0 18px 36px -22px rgba(21,22,26,.16);animation:rise .7s var(--ease) both}
+.metric:nth-child(2){animation-delay:.05s}.metric:nth-child(3){animation-delay:.1s}.metric:nth-child(4){animation-delay:.15s}
+.metric dt{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);font-weight:700}
+.metric dd{margin-top:13px;font-size:33px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.metric small{display:block;margin-top:9px;color:var(--mut);font-size:12.5px}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.field{position:relative;flex:1;min-width:210px}
+.field>svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--mut)}
+input,select,textarea{font:500 14px 'Satoshi';color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:11px 13px;width:100%;transition:.25s var(--ease)}
+.field input{padding-left:40px}
+input:focus-visible,select:focus-visible,button:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-color:var(--acc)}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);font:700 13.5px 'Satoshi';padding:11px 17px;border-radius:11px;cursor:pointer;transition:.3s var(--ease);display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.btn:hover{border-color:#cfcfc7;transform:translateY(-1px);box-shadow:0 8px 20px -12px rgba(21,22,26,.3)}
+.btn:active{transform:translateY(1px) scale(.985)}
+.btn.solid{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn.copy{background:var(--acc);color:#fff;border-color:var(--acc)}
+.btn.copy:hover{background:#0c6449}
+.btn.blue{background:var(--cost-soft);color:var(--cost);border-color:#cfe1ef}
+.btn.blue:hover{border-color:#a9c9e0}
+.btn.danger:hover{color:var(--rose);border-color:#e4c3ca}
+.btn.sm{padding:8px 13px;font-size:12.5px}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 30px 60px -34px rgba(21,22,26,.2);overflow:hidden}
+.scroll{overflow-x:auto}
+table{border-collapse:separate;border-spacing:0;width:100%;min-width:1820px}
+thead th{position:sticky;background:#fcfcfa;font-weight:700;color:var(--mut);white-space:nowrap;text-align:left}
+tr.groups th{top:0;z-index:4;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:11px 10px;border-bottom:1px solid var(--line)}
+tr.groups th.g-id{background:#fafaf7;color:var(--ink2)}
+tr.groups th.g-log{background:#f8f7fb;color:#5a4b7a}
+tr.groups th.g-cost{background:var(--cost-band);color:var(--cost)}
+tr.groups th.g-fee{background:var(--fee-band);color:var(--fee)}
+tr.groups th.g-res{background:var(--acc-band);color:var(--acc)}
+tr.labels th{top:38px;z-index:3;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:11px 10px;border-bottom:1px solid var(--line)}
+th.sep,td.sep{border-left:1px solid var(--line)}
+th.sticky,td.sticky{position:sticky;left:0;z-index:2;background:var(--surface)}
+tr.groups th.sticky,tr.labels th.sticky{z-index:5;background:#fcfcfa}
+td.sticky{box-shadow:1px 0 0 var(--line2)}
+tbody tr:hover td,tbody tr:hover td.sticky{background:#fbfbf9}
+tbody tr.sel td{background:var(--acc-band)!important}
+td{padding:6px 8px;border-bottom:1px solid var(--line2);vertical-align:middle}
+td.cost{background:#fdfeff}td.fee{background:#fffdfb}td.res{background:#fcfdfc}td.log{background:#fdfdff}
+
+/* chips de envio / anúncio */
+.chip{position:relative;display:inline-flex;align-items:center;width:100%}
+.chip select{appearance:none;-webkit-appearance:none;font:700 12px 'Satoshi';letter-spacing:.01em;border-radius:99px;padding:7px 28px 7px 12px;cursor:pointer;border:1px solid transparent;transition:.25s var(--ease)}
+.chip svg{position:absolute;right:9px;pointer-events:none;opacity:.6}
+.chip.envio select{min-width:132px}
+.chip.anun select{min-width:106px}
+.chip select:hover{filter:brightness(.97);border-color:currentColor}
+.sv-proprio{background:#eef1f6;color:#3f4b63}
+.sv-full{background:#e9f2ec;color:#1f6b45}
+.sv-flex{background:#fdf1e6;color:#8a5a1c}
+.sv-coleta{background:#f1eef7;color:#57457f}
+.an-classico{background:#eef1f6;color:#3f4b63}
+.an-premium{background:#f6efdd;color:#7a5c11}
+
+.wrapi{position:relative;display:inline-flex;align-items:center}
+.wrapi .adorn{position:absolute;font:600 11.5px 'JetBrains Mono';color:var(--mut);pointer-events:none}
+.wrapi .adorn.l{left:9px}.wrapi .adorn.r{right:9px}
+.wrapi input{font-family:'JetBrains Mono';font-size:13px;padding:8px 9px;background:transparent;border-color:transparent;text-align:right}
+.wrapi.money input{padding-left:26px}.wrapi.pct input{padding-right:20px}
+.wrapi input:hover{background:#f5f5f2;border-color:var(--line)}
+.wrapi input:focus{background:var(--surface)}
+td .txt{font-family:'Satoshi';font-size:13.5px;padding:8px 10px;background:transparent;border-color:transparent;text-align:left}
+td .txt:hover{background:#f5f5f2;border-color:var(--line)}
+
+.out{font-family:'JetBrains Mono';font-size:13.5px;font-weight:700;text-align:right;white-space:nowrap}
+.out.big{font-size:15px;color:var(--acc)}
+.pos{color:var(--acc)}.neg{color:var(--rose)}.zero{color:var(--mut);font-weight:400}
+.bararea{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.mbar{width:44px;height:5px;border-radius:99px;background:#eeeeea;overflow:hidden;flex:none}
+.mbar i{display:block;height:100%;border-radius:99px;transition:width .5s var(--ease)}
+.tag{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:99px;font:700 11.5px 'Satoshi';white-space:nowrap}
+.tag i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.t-ok{background:var(--acc-soft);color:var(--acc)}.t-bad{background:var(--rose-soft);color:var(--rose)}
+.t-eq{background:var(--amber-soft);color:var(--amber)}.t-na{background:#f2f2ee;color:var(--mut)}
+.icon{width:31px;height:31px;border:1px solid transparent;background:transparent;border-radius:9px;color:var(--mut);cursor:pointer;display:grid;place-items:center;transition:.25s var(--ease)}
+.icon:hover{background:var(--rose-soft);color:var(--rose)}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--acc);cursor:pointer;padding:0}
+
+.empty{padding:60px 30px;text-align:center}
+.empty h3{font-size:19px;font-weight:700;letter-spacing:-.02em;margin:16px 0 8px}
+.empty p{color:var(--mut);font-size:14px;max-width:46ch;margin:0 auto 20px;line-height:1.6}
+.empty .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+
+.hint{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;margin-top:14px;font-size:12.5px;color:var(--mut)}
+.hint b{color:var(--ink2);font-weight:600}
+kbd{font-family:'JetBrains Mono';font-size:11px;background:var(--surface);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:2px 6px;color:var(--ink2)}
+
+/* modais */
+.scrim{position:fixed;inset:0;background:rgba(21,22,26,.32);backdrop-filter:blur(6px);display:none;place-items:center;padding:24px;z-index:50;overflow:auto}
+.scrim.on{display:grid;animation:fade .3s var(--ease)}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:26px;width:100%;max-width:860px;box-shadow:0 50px 90px -40px rgba(21,22,26,.5);animation:pop .45s var(--ease);overflow:hidden}
+@keyframes pop{from{opacity:0;transform:translateY(20px) scale(.98)}to{opacity:1;transform:none}}
+.sheet header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding:26px 30px 20px;border:0;border-bottom:1px solid var(--line2)}
+.sheet h2{font-size:23px;font-weight:900;letter-spacing:-.03em}
+.sheet header p{color:var(--mut);font-size:13.5px;margin-top:6px;max-width:52ch;line-height:1.6}
+.sheet .body{padding:24px 30px}
+.sheet footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 30px;background:#fbfbf9;border-top:1px solid var(--line2);flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.lb{display:block;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);font-weight:700;margin-bottom:7px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{border:1px solid var(--line);background:var(--surface);font:600 13px 'Satoshi';padding:9px 15px;border-radius:99px;cursor:pointer;color:var(--ink2);transition:.25s var(--ease)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.sect{margin-top:22px;padding-top:20px;border-top:1px dashed var(--line)}
+.sect h3{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:14px}
+.preview{display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:var(--acc-band);border:1px solid #d5eae1;border-radius:16px;padding:16px 20px;margin-top:20px}
+.preview div span{display:block;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--acc);font-weight:700}
+.preview div strong{font-family:'JetBrains Mono';font-size:22px;font-weight:700;color:var(--ink)}
+.preview div small{font-family:'JetBrains Mono';font-size:15px;color:var(--ink2)}
+textarea{font-family:'JetBrains Mono';font-size:12.5px;line-height:1.7;min-height:190px;resize:vertical;white-space:pre}
+.drop{border:1.5px dashed #d3d3cb;border-radius:16px;padding:22px;text-align:center;color:var(--mut);font-size:13.5px;transition:.25s var(--ease);cursor:pointer;margin-top:14px}
+.drop:hover,.drop.hot{border-color:var(--acc);background:var(--acc-band);color:var(--acc)}
+.mapnote{font-size:12.5px;color:var(--mut);line-height:1.7;margin-top:12px}
+.mapnote code{font-family:'JetBrains Mono';font-size:11.8px;background:#f4f4f0;padding:2px 5px;border-radius:5px}
+.err{color:var(--rose);font-size:12.8px;margin-top:8px;font-weight:600}
+
+.toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,120%);background:var(--ink);color:#fff;padding:13px 20px;border-radius:13px;font:600 13.5px 'Satoshi';display:flex;align-items:center;gap:10px;box-shadow:0 20px 40px -14px rgba(0,0,0,.45);transition:transform .5s var(--ease);z-index:60;max-width:calc(100vw - 32px)}
+.toast.on{transform:translate(-50%,0)}
+
+@media(max-width:1080px){.bento{grid-template-columns:1fr 1fr}}
+@media(max-width:768px){
+  body{padding:24px 16px 70px}
+  header{grid-template-columns:1fr;gap:20px;align-items:start}
+  .channels{overflow-x:auto}
+  .bento{grid-template-columns:1fr;gap:12px}
+  .toolbar>*{width:100%}.toolbar .field{min-width:0}
+  th.sticky,td.sticky{position:static;box-shadow:none}
+  .grid2,.grid3{grid-template-columns:1fr}
+  .sheet .body,.sheet header,.sheet footer{padding-left:20px;padding-right:20px}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <p class="eyebrow">Preço ideal por SKU</p>
+    <h1>PriceLab <span>/ margem</span></h1>
+    <p class="lede">Traga os produtos colando direto do Excel, cadastre um a um no formulário e devolva tudo para a planilha com um clique. Custos em azul, descontos do canal em âmbar, resultado em verde.</p>
+  </div>
+  <div class="channels" role="tablist" aria-label="Canal de venda" id="tabs"></div>
+</header>
+
+<dl class="bento" id="bento"></dl>
+
+<div class="toolbar">
+  <div class="field">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" type="search" placeholder="Buscar por SKU ou nome do produto" aria-label="Buscar produto">
+  </div>
+  <button class="btn solid" onclick="openForm()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Cadastrar produto</button>
+  <button class="btn blue" onclick="openImport()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v11m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Importar da planilha</button>
+  <button class="btn copy" onclick="copyTable()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5H6a2 2 0 0 0-2 2v9"/></svg><span id="copyLabel">Copiar para planilha</span></button>
+  <button class="btn" onclick="copyTable(true)">Com cabeçalho</button>
+  <button class="btn danger" onclick="wipe()">Limpar canal</button>
+</div>
+
+<section class="panel" aria-live="polite">
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr class="groups">
+          <th class="g-id sticky" colspan="3">Identificação</th>
+          <th class="g-log sep" colspan="2">Envio e anúncio</th>
+          <th class="g-cost sep" colspan="3">Custos diretos (R$)</th>
+          <th class="g-fee sep" colspan="5">Descontos sobre a venda (%)</th>
+          <th class="g-res sep" colspan="2">Meta</th>
+          <th class="g-res sep" colspan="5">Resultado no preço atual</th>
+          <th class="g-id sep" colspan="2">Mercado</th>
+        </tr>
+        <tr class="labels">
+          <th class="sticky" style="width:38px"><input type="checkbox" id="all" aria-label="Selecionar todas" onchange="toggleAll(this.checked)"></th>
+          <th class="sticky" style="left:38px">SKU</th>
+          <th style="min-width:230px">Produto</th>
+          <th class="sep">Modalidade de envio</th><th>Tipo de anúncio</th>
+          <th class="sep">CMV</th><th>Embalagem</th><th>Frete vendedor</th>
+          <th class="sep">Comissão</th><th>Imposto</th><th>ADS / TACOS</th><th>Cupom</th><th>Custo fixo</th>
+          <th class="sep">Margem meta</th><th>Preço ideal</th>
+          <th class="sep">Preço atual</th><th>Margem real</th><th>Lucro un.</th><th>Diferença</th><th>Situação</th>
+          <th class="sep">Preço médio</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+  <div id="state"></div>
+</section>
+
+<div class="hint">
+  <span><b>Colar na planilha:</b> marque as linhas, clique em Copiar, selecione a célula da coluna SKU e pressione <kbd>Ctrl</kbd> <kbd>V</kbd>.</span>
+  <span><kbd>Ctrl</kbd> <kbd>K</kbd> buscar</span><span><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>C</kbd> copiar</span>
+</div>
+</div>
+
+<!-- MODAL CADASTRO -->
+<div class="scrim" id="mForm" role="dialog" aria-modal="true" aria-labelledby="formTitle">
+  <div class="sheet">
+    <header>
+      <div>
+        <h2 id="formTitle">Cadastrar produto</h2>
+        <p>Preencha custo, frete e as taxas do canal. O preço ideal aparece embaixo antes de você salvar.</p>
+      </div>
+      <button class="icon" aria-label="Fechar" onclick="closeAll()"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="body">
+      <div class="grid2">
+        <div><label class="lb" for="f_sku">SKU</label><input id="f_sku" class="num" placeholder="KIT03-DADAMEN600" oninput="prev()"></div>
+        <div><label class="lb" for="f_nome">Nome do produto</label><input id="f_nome" placeholder="Kit 3 pacotes doce de amendoim 600g" oninput="prev()"></div>
+      </div>
+      <div class="grid2" style="margin-top:16px">
+        <div><span class="lb">Modalidade de envio</span><div class="seg" id="segEnvio"></div></div>
+        <div><span class="lb">Tipo de anúncio</span><div class="seg" id="segAnun"></div></div>
+      </div>
+      <div class="sect">
+        <h3>Custos diretos</h3>
+        <div class="grid3">
+          <div><label class="lb" for="f_cmv">CMV (R$)</label><input id="f_cmv" class="num" type="number" step="0.01" value="0" oninput="prev()"></div>
+          <div><label class="lb" for="f_emb">Embalagem (R$)</label><input id="f_emb" class="num" type="number" step="0.01" value="1.5" oninput="prev()"></div>
+          <div><label class="lb" for="f_frete">Frete vendedor (R$)</label><input id="f_frete" class="num" type="number" step="0.01" value="0" oninput="prev()"></div>
+        </div>
+      </div>
+      <div class="sect">
+        <h3>Descontos sobre a venda</h3>
+        <div class="grid3">
+          <div><label class="lb" for="f_com">Comissão (%)</label><input id="f_com" class="num" type="number" step="0.1" value="14" oninput="prev()"></div>
+          <div><label class="lb" for="f_imp">Imposto (%)</label><input id="f_imp" class="num" type="number" step="0.1" value="12" oninput="prev()"></div>
+          <div><label class="lb" for="f_ads">ADS / TACOS (%)</label><input id="f_ads" class="num" type="number" step="0.1" value="0" oninput="prev()"></div>
+          <div><label class="lb" for="f_cup">Cupom (%)</label><input id="f_cup" class="num" type="number" step="0.1" value="0" oninput="prev()"></div>
+          <div><label class="lb" for="f_fixo">Custo fixo rateado (%)</label><input id="f_fixo" class="num" type="number" step="0.1" value="0" oninput="prev()"></div>
+          <div><label class="lb" for="f_marg">Margem desejada (%)</label><input id="f_marg" class="num" type="number" step="0.1" value="15" oninput="prev()"></div>
+        </div>
+      </div>
+      <div class="sect">
+        <h3>Mercado</h3>
+        <div class="grid2">
+          <div><label class="lb" for="f_atual">Preço atual anunciado (R$)</label><input id="f_atual" class="num" type="number" step="0.01" value="0" oninput="prev()"></div>
+          <div><label class="lb" for="f_pmm">Preço médio de mercado (R$)</label><input id="f_pmm" class="num" type="number" step="0.01" value="0" oninput="prev()"></div>
+        </div>
+      </div>
+      <div class="preview">
+        <div><span>Preço ideal de venda</span><strong id="pvIdeal">R$ 0,00</strong></div>
+        <div><span>Custo total</span><small id="pvCusto">R$ 0,00</small></div>
+        <div><span>Margem no preço atual</span><small id="pvMrg">—</small></div>
+        <div id="pvTag"></div>
+      </div>
+      <p class="err" id="fErr" hidden></p>
+    </div>
+    <footer>
+      <span style="color:var(--mut);font-size:12.5px">Canal: <b id="fCanal" style="color:var(--ink2)"></b></span>
+      <span style="display:flex;gap:10px">
+        <button class="btn" onclick="closeAll()">Cancelar</button>
+        <button class="btn" onclick="saveForm(true)">Salvar e novo</button>
+        <button class="btn copy" onclick="saveForm(false)">Salvar produto</button>
+      </span>
+    </footer>
+  </div>
+</div>
+
+<!-- MODAL IMPORTAÇÃO -->
+<div class="scrim" id="mImp" role="dialog" aria-modal="true" aria-labelledby="impTitle">
+  <div class="sheet">
+    <header>
+      <div>
+        <h2 id="impTitle">Importar da planilha</h2>
+        <p>Selecione as linhas no Excel ou Google Sheets, copie e cole aqui. Também aceita CSV com ponto e vírgula ou arquivo arrastado.</p>
+      </div>
+      <button class="icon" aria-label="Fechar" onclick="closeAll()"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="body">
+      <label class="lb" for="impArea">Cole os dados aqui</label>
+      <textarea id="impArea" placeholder="COSPACCX-100UN	Caixa de paçoca rolha 100un	Estoque Próprio	Clássico	17,00	1,00	8,75	14	12	0	0	0	7			39,93" oninput="impPreview()"></textarea>
+      <div class="drop" id="drop" tabindex="0" role="button" onclick="document.getElementById('file').click()" onkeydown="if(event.key==='Enter')document.getElementById('file').click()">
+        Arraste um arquivo CSV aqui ou clique para escolher
+        <input type="file" id="file" accept=".csv,.txt,.tsv" hidden>
+      </div>
+      <p class="mapnote">Ordem esperada das colunas: <code>SKU</code> <code>Produto</code> <code>Envio</code> <code>Anúncio</code> <code>CMV</code> <code>Embalagem</code> <code>Frete</code> <code>Comissão</code> <code>Imposto</code> <code>ADS</code> <code>Cupom</code> <code>Fixo</code> <code>Margem</code> — as colunas seguintes de resultado são ignoradas, exceto <code>Preço Atual</code> na posição 15 e <code>Preço Médio</code> na 20. Linhas em branco e o cabeçalho são descartados sozinhos. Aceita <code>R$ 17,00</code>, <code>14%</code> e vírgula decimal.</p>
+      <p class="err" id="iErr" hidden></p>
+      <div class="preview" id="impStat" hidden><div><span>Pronto para importar</span><strong id="impCount">0 linhas</strong></div><div><span>Canal de destino</span><small id="impCanal"></small></div></div>
+    </div>
+    <footer>
+      <label style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink2);font-weight:600"><input type="checkbox" id="impReplace"> Substituir os produtos já existentes neste canal</label>
+      <span style="display:flex;gap:10px">
+        <button class="btn" onclick="closeAll()">Cancelar</button>
+        <button class="btn copy" onclick="runImport()">Importar</button>
+      </span>
+    </footer>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const CHANNELS=['Mercado Livre','TikTok Shop','Shopee','Loja física'];
+const ENVIOS=['Estoque Próprio','Full','Flex','Coleta'];
+const ANUNCIOS=['Clássico','Premium'];
+const NUM=['cmv','emb','frete','com','imp','ads','cup','fixo','marg','atual','pmm'];
+const FIELDS=['sku','nome','envio','anuncio','cmv','emb','frete','com','imp','ads','cup','fixo','marg','atual','pmm'];
+const HEAD=['SKU','Nome do Produto','Modalidade de Envio','Tipo de Anúncio','CMV','Embalagem','Frete pago pelo vendedor','Comissão (%)','Imposto (%)','ADS / TACOS (%)','Cupons (%)','Custo Fixo Rateado (%)','Margem de Lucro Desejada (%)','Preço Ideal de Venda','Preço Atual','Margem Líquida (%)','Lucro Líquido (R$)','Diferença (Atual - Ideal)','Status','Preço Médio Mercado'];
+const CLS_ENV={'Estoque Próprio':'sv-proprio','Full':'sv-full','Flex':'sv-flex','Coleta':'sv-coleta'};
+const CLS_AN={'Clássico':'an-classico','Premium':'an-premium'};
+
+let ch=+(localStorage.getItem('pl_ch')||0);
+let db=JSON.parse(localStorage.getItem('pl_db3')||'null');
+const blank=()=>({sel:true,sku:'',nome:'',envio:'Estoque Próprio',anuncio:'Clássico',cmv:0,emb:1.5,frete:0,com:14,imp:12,ads:0,cup:0,fixo:0,marg:15,atual:0,pmm:0});
+if(!db){db={0:[
+ {sel:true,sku:'COSPACCX-100UN',nome:'Caixa de paçoca rolha tradicional 100un 15g',envio:'Estoque Próprio',anuncio:'Clássico',cmv:17,emb:1,frete:8.75,com:14,imp:12,ads:0,cup:0,fixo:0,marg:7,atual:39.93,pmm:43.67},
+ {sel:true,sku:'KIT4-CHIPOOSH200',nome:'Kit 4 caixas chiclete display 200g 40un',envio:'Full',anuncio:'Premium',cmv:20.76,emb:1.5,frete:14.45,com:19,imp:12,ads:0,cup:0,fixo:0,marg:7,atual:72.5,pmm:0},
+ {sel:true,sku:'KIT10-POPSPCM125-AZ',nome:'Tinta spray pinta cabelo lavável kit 10un',envio:'Estoque Próprio',anuncio:'Clássico',cmv:88,emb:1.5,frete:21.35,com:14,imp:12,ads:0,cup:0,fixo:0,marg:7,atual:142.5,pmm:0},
+ {sel:true,sku:'GMPOTRET72-500',nome:'Pote 500ml marmita fit freezer 72un',envio:'Flex',anuncio:'Clássico',cmv:22.28,emb:1.5,frete:20.75,com:12,imp:12,ads:0,cup:0,fixo:0,marg:10,atual:65.9,pmm:0}
+]}}
+const rows=()=>(db[ch]=db[ch]||[]);
+const save=()=>{localStorage.setItem('pl_db3',JSON.stringify(db));localStorage.setItem('pl_ch',ch)};
+const brl=v=>(isFinite(v)?v:0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const n2=v=>(isFinite(v)?v:0).toFixed(2).replace('.',',');
+const esc=s=>String(s??'').replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+
+function calc(r){
+  const custo=+r.cmv + +r.emb + +r.frete;
+  const pct=(+r.com + +r.imp + +r.ads + +r.cup + +r.fixo)/100;
+  const den=1-pct-(+r.marg/100);
+  const ideal=den>0?custo/den:NaN;
+  const at=+r.atual, live=at>0;
+  const lucro=live?at-custo-at*pct:0;
+  return {custo,ideal,at,live,lucro,mrg:live?lucro/at*100:0,dif:live&&isFinite(ideal)?at-ideal:0};
+}
+const statusOf=c=>!c.live?['Sem preço','t-na']:c.dif>0.05?['Acima do ideal','t-ok']:c.dif<-0.05?['Abaixo do ideal','t-bad']:['No preço ideal','t-eq'];
+const CHEV='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+
+function renderTabs(){document.getElementById('tabs').innerHTML=CHANNELS.map((c,i)=>`<button role="tab" aria-selected="${i===ch}" onclick="ch=${i};save();render()">${c}</button>`).join('')}
+
+function render(){
+  renderTabs();
+  const q=document.getElementById('q').value.trim().toLowerCase();
+  const tb=document.getElementById('tb'), list=rows();
+  let lucros=0,mrgs=[],ruins=0,ativos=0,marcadas=0;
+  tb.innerHTML='';
+  list.forEach((r,i)=>{
+    const c=calc(r), st=statusOf(c);
+    if(r.sku||r.nome){ativos++;lucros+=c.lucro;if(c.live){mrgs.push(c.mrg);if(c.dif<-0.05)ruins++}}
+    if(r.sel)marcadas++;
+    if(q && !((r.sku+' '+r.nome).toLowerCase().includes(q))) return;
+    const money=(k,w,cls='')=>`<td class="${cls}"><span class="wrapi money"><span class="adorn l">R$</span><input type="number" step="0.01" inputmode="decimal" style="width:${w}px" value="${r[k]}" aria-label="${k}" onchange="up(${i},'${k}',this.value)"></span></td>`;
+    const pctc=(k,w,cls='')=>`<td class="${cls}"><span class="wrapi pct"><input type="number" step="0.1" inputmode="decimal" style="width:${w}px" value="${r[k]}" aria-label="${k}" onchange="up(${i},'${k}',this.value)"><span class="adorn r">%</span></span></td>`;
+    const chip=(k,opts,map,kind,cls)=>`<td class="log ${cls}"><span class="chip ${kind}"><select class="${map[r[k]]||''}" aria-label="${k}" onchange="up(${i},'${k}',this.value)">${opts.map(o=>`<option ${r[k]===o?'selected':''}>${o}</option>`).join('')}</select>${CHEV}</span></td>`;
+    const sig=v=>v>0.005?'pos':v<-0.005?'neg':'zero';
+    const barColor=c.mrg<0?'var(--rose)':c.mrg<5?'var(--amber)':'var(--acc)';
+    tb.insertAdjacentHTML('beforeend',`<tr class="${r.sel?'sel':''}">
+      <td class="sticky"><input type="checkbox" ${r.sel?'checked':''} aria-label="Copiar ${esc(r.sku)||'linha '+(i+1)}" onchange="up(${i},'sel',this.checked)"></td>
+      <td class="sticky" style="left:38px"><input class="txt num" style="width:150px;font-size:12.5px" type="text" value="${esc(r.sku)}" aria-label="SKU" onchange="up(${i},'sku',this.value)"></td>
+      <td><input class="txt" style="width:245px" type="text" value="${esc(r.nome)}" aria-label="Produto" onchange="up(${i},'nome',this.value)"></td>
+      ${chip('envio',ENVIOS,CLS_ENV,'envio','sep')}${chip('anuncio',ANUNCIOS,CLS_AN,'anun','')}
+      ${money('cmv',96,'cost sep')}${money('emb',88,'cost')}${money('frete',96,'cost')}
+      ${pctc('com',74,'fee sep')}${pctc('imp',74,'fee')}${pctc('ads',78,'fee')}${pctc('cup',72,'fee')}${pctc('fixo',76,'fee')}
+      ${pctc('marg',86,'res sep')}
+      <td class="res out big">${isFinite(c.ideal)?brl(c.ideal):'custos &gt; 100%'}</td>
+      ${money('atual',100,'sep')}
+      <td class="out ${c.live?sig(c.mrg):'zero'}"><span class="bararea">${c.live?`<span class="mbar"><i style="width:${Math.max(0,Math.min(100,c.mrg*3))}%;background:${barColor}"></i></span>${c.mrg.toFixed(1)}%`:'—'}</span></td>
+      <td class="out ${c.live?sig(c.lucro):'zero'}">${c.live?brl(c.lucro):'—'}</td>
+      <td class="out ${c.live?sig(c.dif):'zero'}">${c.live?(c.dif>0?'+':'')+brl(c.dif):'—'}</td>
+      <td><span class="tag ${st[1]}"><i aria-hidden="true"></i>${st[0]}</span></td>
+      ${money('pmm',96,'sep')}
+      <td><button class="icon" aria-label="Remover ${esc(r.sku)||'linha'}" onclick="rm(${i})"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button></td>
+    </tr>`);
+  });
+
+  document.getElementById('all').checked=list.length>0&&marcadas===list.length;
+  document.getElementById('copyLabel').textContent=marcadas?`Copiar ${marcadas} linha${marcadas>1?'s':''}`:'Copiar para planilha';
+
+  const state=document.getElementById('state');
+  if(!list.length) state.innerHTML=`<div class="empty"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#8a8d95" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M9 10v10"/></svg><h3>Nenhum produto em ${CHANNELS[ch]}</h3><p>Cadastre um SKU pelo formulário ou traga a lista inteira colando as linhas da sua planilha.</p><div class="row"><button class="btn solid" onclick="openForm()">Cadastrar produto</button><button class="btn blue" onclick="openImport()">Importar da planilha</button></div></div>`;
+  else if(!tb.children.length) state.innerHTML=`<div class="empty"><h3>Nada encontrado para "${esc(q)}"</h3><p>Confira a grafia do SKU ou limpe a busca para ver os ${list.length} produtos deste canal.</p><button class="btn" onclick="document.getElementById('q').value='';render()">Limpar busca</button></div>`;
+  else state.innerHTML='';
+
+  const avg=mrgs.length?mrgs.reduce((a,b)=>a+b,0)/mrgs.length:0;
+  document.getElementById('bento').innerHTML=[
+    ['Margem média real',mrgs.length?avg.toFixed(1)+'%':'—',`${mrgs.length} SKU com preço publicado em ${CHANNELS[ch]}`,mrgs.length?(avg>=7?'pos':'neg'):'zero'],
+    ['SKUs no canal',ativos,'linhas preenchidas',''],
+    ['Lucro por venda unitária',brl(lucros),'soma de 1 unidade de cada SKU',lucros>=0?'pos':'neg'],
+    ['Precisam de ajuste',ruins,ruins?'vendendo abaixo do preço ideal':'nenhum SKU no vermelho',ruins?'neg':'pos']
+  ].map(m=>`<div class="metric"><dt>${m[0]}</dt><dd class="num ${m[3]}">${m[1]}</dd><small>${m[2]}</small></div>`).join('');
+  save();
+}
+
+function up(i,k,v){rows()[i][k]=k==='sel'?v:(NUM.includes(k)?(parseFloat(String(v).replace(',','.'))||0):v);render()}
+function toggleAll(v){rows().forEach(r=>r.sel=v);render()}
+function rm(i){rows().splice(i,1);render()}
+function wipe(){if(confirm(`Remover todos os produtos de ${CHANNELS[ch]}?`)){db[ch]=[];render()}}
+
+/* ---------- cadastro ---------- */
+let fEnvio=ENVIOS[0], fAnun=ANUNCIOS[0];
+function segs(){
+  document.getElementById('segEnvio').innerHTML=ENVIOS.map(o=>`<button type="button" aria-pressed="${o===fEnvio}" onclick="fEnvio='${o}';segs()">${o}</button>`).join('');
+  document.getElementById('segAnun').innerHTML=ANUNCIOS.map(o=>`<button type="button" aria-pressed="${o===fAnun}" onclick="fAnun='${o}';segs()">${o}</button>`).join('');
+}
+const gv=id=>parseFloat(String(document.getElementById(id).value).replace(',','.'))||0;
+function formData(){return{sel:true,sku:document.getElementById('f_sku').value.trim(),nome:document.getElementById('f_nome').value.trim(),envio:fEnvio,anuncio:fAnun,cmv:gv('f_cmv'),emb:gv('f_emb'),frete:gv('f_frete'),com:gv('f_com'),imp:gv('f_imp'),ads:gv('f_ads'),cup:gv('f_cup'),fixo:gv('f_fixo'),marg:gv('f_marg'),atual:gv('f_atual'),pmm:gv('f_pmm')}}
+function prev(){
+  const c=calc(formData()), st=statusOf(c);
+  document.getElementById('pvIdeal').textContent=isFinite(c.ideal)?brl(c.ideal):'taxas acima de 100%';
+  document.getElementById('pvCusto').textContent=brl(c.custo);
+  document.getElementById('pvMrg').textContent=c.live?c.mrg.toFixed(1)+'%':'—';
+  document.getElementById('pvTag').innerHTML=`<span class="tag ${st[1]}"><i aria-hidden="true"></i>${st[0]}</span>`;
+}
+function openForm(){
+  fEnvio=ENVIOS[0];fAnun=ANUNCIOS[0];segs();
+  ['f_sku','f_nome'].forEach(i=>document.getElementById(i).value='');
+  ({f_cmv:0,f_emb:1.5,f_frete:0,f_com:14,f_imp:12,f_ads:0,f_cup:0,f_fixo:0,f_marg:15,f_atual:0,f_pmm:0});
+  const d={f_cmv:0,f_emb:1.5,f_frete:0,f_com:14,f_imp:12,f_ads:0,f_cup:0,f_fixo:0,f_marg:15,f_atual:0,f_pmm:0};
+  for(const k in d) document.getElementById(k).value=d[k];
+  document.getElementById('fCanal').textContent=CHANNELS[ch];
+  document.getElementById('fErr').hidden=true;
+  prev();document.getElementById('mForm').classList.add('on');document.getElementById('f_sku').focus();
+}
+function saveForm(again){
+  const d=formData(), e=document.getElementById('fErr');
+  if(!d.sku && !d.nome){e.textContent='Informe pelo menos o SKU ou o nome do produto.';e.hidden=false;return}
+  if(d.cmv<=0){e.textContent='O CMV precisa ser maior que zero para o cálculo fazer sentido.';e.hidden=false;return}
+  e.hidden=true;rows().push(d);render();
+  toast(`${d.sku||d.nome} cadastrado em ${CHANNELS[ch]}`);
+  if(again){openForm()}else{closeAll()}
+}
+
+/* ---------- importação ---------- */
+function parseNum(v){
+  if(v==null)return 0;
+  let s=String(v).replace(/[R$\s%]/g,'').replace(/\((.*)\)/,'-$1').trim();
+  if(s==='' || s==='-')return 0;
+  if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');
+  else s=s.replace(',','.');
+  return parseFloat(s)||0;
+}
+function splitLine(l){return l.includes('\t')?l.split('\t'):(l.split(';').length>l.split(',').length?l.split(';'):l.split(','))}
+function parseInput(txt){
+  const out=[];
+  txt.replace(/\r/g,'').split('\n').forEach(line=>{
+    if(!line.trim())return;
+    const c=splitLine(line).map(s=>s.trim().replace(/^"|"$/g,''));
+    const head=(c[0]||'').toLowerCase();
+    if(head==='sku'||head.startsWith('precifica')||head.startsWith('legenda'))return;
+    if(!c[0]&&!c[1])return;
+    const envio=ENVIOS.find(e=>e.toLowerCase()===(c[2]||'').toLowerCase())||'Estoque Próprio';
+    const anun=ANUNCIOS.find(a=>a.toLowerCase()===(c[3]||'').toLowerCase())||'Clássico';
+    out.push({sel:true,sku:c[0]||'',nome:c[1]||c[0]||'',envio,anuncio:anun,
+      cmv:parseNum(c[4]),emb:parseNum(c[5]),frete:parseNum(c[6]),
+      com:parseNum(c[7]),imp:parseNum(c[8]),ads:parseNum(c[9]),cup:parseNum(c[10]),fixo:parseNum(c[11]),
+      marg:parseNum(c[12])||15,atual:parseNum(c[14]),pmm:parseNum(c[19])});
+  });
+  return out;
+}
+function impPreview(){
+  const n=parseInput(document.getElementById('impArea').value).length;
+  const box=document.getElementById('impStat');
+  box.hidden=!n;document.getElementById('impCount').textContent=n+(n===1?' linha':' linhas');
+  document.getElementById('impCanal').textContent=CHANNELS[ch];
+  document.getElementById('iErr').hidden=true;
+}
+function openImport(){
+  document.getElementById('impArea').value='';document.getElementById('impStat').hidden=true;
+  document.getElementById('iErr').hidden=true;document.getElementById('impReplace').checked=false;
+  document.getElementById('mImp').classList.add('on');document.getElementById('impArea').focus();
+}
+function runImport(){
+  const list=parseInput(document.getElementById('impArea').value), e=document.getElementById('iErr');
+  if(!list.length){e.textContent='Nada reconhecido. Cole as linhas da planilha ou selecione um arquivo CSV.';e.hidden=false;return}
+  if(document.getElementById('impReplace').checked)db[ch]=[];
+  db[ch]=(db[ch]||[]).concat(list);render();closeAll();
+  toast(`${list.length} produto${list.length>1?'s':''} importado${list.length>1?'s':''} para ${CHANNELS[ch]}`);
+}
+const drop=document.getElementById('drop'), file=document.getElementById('file');
+file.addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{document.getElementById('impArea').value=rd.result;impPreview()};rd.readAsText(f,'utf-8')});
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('hot')}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('hot')}));
+drop.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{document.getElementById('impArea').value=rd.result;impPreview()};rd.readAsText(f,'utf-8')});
+
+/* ---------- cópia ---------- */
+function buildTSV(withHead){
+  const sel=rows().filter(r=>r.sel), src=sel.length?sel:rows();
+  const lines=src.map(r=>{const c=calc(r);
+    return [r.sku,r.nome,r.envio,r.anuncio,n2(r.cmv),n2(r.emb),n2(r.frete),n2(r.com),n2(r.imp),n2(r.ads),n2(r.cup),n2(r.fixo),n2(r.marg),
+      isFinite(c.ideal)?n2(c.ideal):'',n2(r.atual),c.live?n2(c.mrg):'',c.live?n2(c.lucro):'',c.live?n2(c.dif):'',statusOf(c)[0],r.pmm?n2(r.pmm):''
+    ].map(v=>String(v??'').replace(/[\t\r\n]/g,' ')).join('\t')});
+  return {text:(withHead?[HEAD.join('\t'),...lines]:lines).join('\r\n'),count:src.length};
+}
+async function copyTable(withHead=false){
+  const {text,count}=buildTSV(withHead);
+  if(!count)return toast('Nenhuma linha para copiar');
+  try{await navigator.clipboard.writeText(text)}
+  catch(e){const ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}
+  toast(`${count} linha${count>1?'s':''} copiada${count>1?'s':''}${withHead?' com cabeçalho':''}. Cole na coluna SKU com Ctrl+V`);
+}
+let tt;
+function toast(msg){const el=document.getElementById('toast');
+  el.innerHTML=`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c6ffdf" stroke-width="2.2" aria-hidden="true"><path d="m4 12 5 5L20 6"/></svg>${msg}`;
+  el.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('on'),3800)}
+function closeAll(){document.querySelectorAll('.scrim').forEach(s=>s.classList.remove('on'))}
+document.querySelectorAll('.scrim').forEach(s=>s.addEventListener('click',e=>{if(e.target===s)closeAll()}));
+document.getElementById('q').addEventListener('input',render);
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closeAll();
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();document.getElementById('q').focus()}
+  if((e.metaKey||e.ctrlKey)&&e.shiftKey&&e.key.toLowerCase()==='c'){e.preventDefault();copyTable()}
+});
+segs();render();
+</script>
+</body>
+</html>
